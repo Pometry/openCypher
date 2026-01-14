@@ -57,6 +57,10 @@ Documentation of that time can be found https://opencypher.org/oC9history[the we
 Any feedback you provide to Neo4j, Inc. through this repository shall be deemed to be non-confidential.
 You grant Neo4j, Inc. a perpetual, irrevocable, worldwide, royalty-free license to use, reproduce, modify, publicly perform, publicly display and distribute such feedback on an unrestricted basis.
 
+== Disclaimer
+
+This repository is not an official Neo4j product or project. It is maintained by Neo4j employees or contributors in a personal or experimental capacity. The content here is provided “as is,” comes with no guarantees, and is unsupported.
+
 == License
 
 The `openCypher` project is licensed under the http://www.apache.org/licenses/LICENSE-2.0[Apache license 2.0].
