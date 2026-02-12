@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from behave import given
+from cypher_tck.graph_db import SideEffects
+from raphtory import Graph
+from raphtory.gql import gql
+from .common import ResultTable
 
 if TYPE_CHECKING:
     from behave.runner import Context
@@ -16,7 +21,7 @@ def step_given_empty_graph(context: Context) -> None:
 
     This step ensures the graph database is cleared of all nodes and relationships.
     """
-    context.graph_db.clear()
+    context.graph_db = Graph()
 
 
 @given("any graph")
@@ -46,10 +51,17 @@ def step_given_having_executed(context: Context) -> None:
     query = context.text.strip()
 
     # Execute the setup query
-    result = context.graph_db.execute_query(query)
+    graph = getattr(context, "graph_db", None)
+    if graph is None:
+        raise ValueError("Graph database not initialized. Ensure you have an 'an empty graph' or 'any graph' step before this one.")
+    
+    count_nodes_before = graph.count_nodes()
+    count_relationships_before = graph.count_edges()
 
+    results = gql(graph, query)
+    context.query_result = ResultTable(columns=results.columns, rows=list(results))
     # Store the side effects from setup (in case they're needed)
-    context.setup_side_effects = result.side_effects
+    context.setup_side_effects = SideEffects( nodes_created=graph.count_nodes() - count_nodes_before, relationships_created=graph.count_edges() - count_relationships_before, )
 
 
 @given('there exists a procedure {procedure_signature}')

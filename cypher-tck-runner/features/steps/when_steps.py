@@ -5,6 +5,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from behave import when
+from raphtory import Graph
+from raphtory.gql import gql
+from .common import ResultTable
 
 if TYPE_CHECKING:
     from behave.runner import Context
@@ -29,7 +32,9 @@ def step_when_executing_query(context: Context) -> None:
 
     try:
         # Execute the query and store the result
-        context.query_result = context.graph_db.execute_query(query)
+        table = gql(context.graph_db, query)
+        context.query_result = ResultTable(columns=table.columns, rows=list(table))
+        
         context.actual_error = None
     except Exception as e:
         # Store the error for validation in Then steps
