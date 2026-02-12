@@ -168,6 +168,8 @@ class ResultMatcher:
         """
         if actual == expected:
             return True, ""
+        else:
+            return False, f'Side effects mismatch: expected {expected}, got {actual}'
 
         missing = set(expected.keys()) - set(actual.keys())
         extra = set(actual.keys()) - set(expected.keys())

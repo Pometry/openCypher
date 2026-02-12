@@ -9,7 +9,7 @@ from behave import given
 from cypher_tck.graph_db import SideEffects
 from raphtory import Graph
 from raphtory.gql import gql
-from .common import ResultTable
+import common
 
 if TYPE_CHECKING:
     from behave.runner import Context
@@ -59,7 +59,7 @@ def step_given_having_executed(context: Context) -> None:
     count_relationships_before = graph.count_edges()
 
     results = gql(graph, query)
-    context.query_result = ResultTable(columns=results.columns, rows=list(results))
+    context.query_result = common.ResultTable(columns=results.columns, rows=list(results))
     # Store the side effects from setup (in case they're needed)
     context.setup_side_effects = SideEffects( nodes_created=graph.count_nodes() - count_nodes_before, relationships_created=graph.count_edges() - count_relationships_before, )
 

@@ -120,7 +120,7 @@ def step_then_no_side_effects(context: Context) -> None:
     if not context.query_result:
         raise AssertionError("No query result available")
 
-    side_effects = context.query_result.side_effects
+    side_effects = context.side_effects
 
     if not side_effects.has_no_effects():
         raise AssertionError(
@@ -143,13 +143,25 @@ def step_then_side_effects(context: Context) -> None:
 
     # Parse expected side effects from the table
     expected_effects = {}
-    for row in context.table:
-        effect_name = row[0]
-        effect_value = int(row[1])
-        expected_effects[effect_name] = effect_value
+    
+    # If table has no rows, it means the single row was treated as headers
+    # In that case, use headings as key-value pairs
+    if len(context.table.rows) == 0 and len(context.table.headings) >= 2:
+        # Parse as key-value pairs from headings (e.g., | +nodes | 1 |)
+        # Iterate in pairs: effect_name, effect_value
+        for i in range(0, len(context.table.headings), 2):
+            effect_name = context.table.headings[i]
+            effect_value = int(context.table.headings[i + 1])
+            expected_effects[effect_name] = effect_value
+    else:
+        # Parse as normal rows
+        for row in context.table:
+            effect_name = row[0]
+            effect_value = int(row[1])
+            expected_effects[effect_name] = effect_value
 
     # Get actual side effects
-    actual_effects = context.query_result.side_effects.to_dict()
+    actual_effects = context.side_effects.to_dict()
 
     # Compare side effects
     match, error = ResultMatcher.compare_side_effects(actual_effects, expected_effects)
