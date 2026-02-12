@@ -36,7 +36,13 @@ def step_when_executing_query(context: Context) -> None:
     count_relationships_before = context.graph_db.count_edges()
     try:
         table = gql(context.graph_db, query)
-        context.query_result = common.ResultTable(columns=table.columns, rows=list(table))
+        # Convert GqlRow objects to plain dictionaries
+        rows_as_dicts = []
+        for row in table:
+            # GqlRow objects can be converted to dict by accessing as dictionary
+            row_dict = {col: row[col] for col in table.columns}
+            rows_as_dicts.append(row_dict)
+        context.query_result = common.ResultTable(columns=table.columns, rows=rows_as_dicts)
         context.actual_error = None
     except Exception as e:
         # Store the error for validation in Then steps

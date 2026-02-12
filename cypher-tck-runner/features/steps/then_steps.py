@@ -31,7 +31,8 @@ def step_then_result_unordered(context: Context) -> None:
         raise AssertionError("No query result available")
 
     # Parse expected results from the table
-    table_rows = [[cell for cell in row] for row in context.table]
+    # Behave separates headings from rows, but parse_table_rows expects headers as first row
+    table_rows = [list(context.table.headings)] + [[cell for cell in row] for row in context.table]
     expected_columns, expected_rows = ResultMatcher.parse_table_rows(table_rows)
 
     # Compare results (unordered)
@@ -68,7 +69,8 @@ def step_then_result_ordered(context: Context) -> None:
         raise AssertionError("No query result available")
 
     # Parse expected results from the table
-    table_rows = [[cell for cell in row] for row in context.table]
+    # Behave separates headings from rows, but parse_table_rows expects headers as first row
+    table_rows = [list(context.table.headings)] + [[cell for cell in row] for row in context.table]
     expected_columns, expected_rows = ResultMatcher.parse_table_rows(table_rows)
 
     # Compare results (ordered)
