@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from cypher_tck.graph_db import StubGraphDatabase
+from raphtory import Graph
 
 if TYPE_CHECKING:
     from behave.model import Scenario
@@ -17,8 +17,7 @@ if TYPE_CHECKING:
 
 def before_all(context: Context) -> None:
     """Initialize the test environment before any scenarios run."""
-    # Initialize the graph database (replace with your implementation)
-    context.graph_db = StubGraphDatabase()
+    context.graph_db = Graph()
 
 
 def before_scenario(context: Context, scenario: Scenario) -> None:
@@ -28,8 +27,8 @@ def before_scenario(context: Context, scenario: Scenario) -> None:
         context: Behave context object
         scenario: The scenario about to be executed
     """
-    # Clear the graph database before each scenario
-    context.graph_db.clear()
+    # Start each scenario with a fresh graph
+    context.graph_db = Graph()
 
     # Initialize scenario-specific state
     context.query_result = None

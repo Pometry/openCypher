@@ -30,8 +30,9 @@ def step_given_any_graph(context: Context) -> None:
 
     This step doesn't modify the graph - it can contain any data.
     """
-    # No action needed - just use the current graph state
-    pass
+    # Ensure graph_db is a Raphtory Graph (should already be set by before_scenario)
+    if not hasattr(context, "graph_db") or not isinstance(context.graph_db, Graph):
+        context.graph_db = Graph()
 
 
 @given("having executed:")
@@ -66,20 +67,59 @@ def step_given_having_executed(context: Context) -> None:
 
 @given('there exists a procedure {procedure_signature}')
 def step_given_procedure_exists(context: Context, procedure_signature: str) -> None:
-    """Register that a procedure exists for CALL testing.
+    """Register a procedure with the Rust query coordinator for CALL testing.
 
     Example:
         Given there exists a procedure test.doNothing() :: ():
-
-    This is a stub implementation. In a real implementation, you would
-    register the procedure with your graph database.
+        Given there exists a procedure test.my.proc(name :: STRING?, id :: INTEGER?) :: (city :: STRING?, country_code :: INTEGER?):
     """
-    # TODO: Implement procedure registration
-    # For now, just store that the procedure exists
-    if not hasattr(context, "procedures"):
-        context.procedures = {}
+    import re
+    from raphtory.gql import register_procedure
 
-    context.procedures[procedure_signature] = {
-        "signature": procedure_signature,
-        "data": list(context.table) if hasattr(context, "table") and context.table else [],
-    }
+    # Parse signature: name(input_params) :: (output_params)
+    m = re.match(r'([\w.]+)\((.*?)\)\s*::\s*\((.*?)\)', procedure_signature, re.DOTALL)
+    if not m:
+        proc_name = procedure_signature.split('(')[0].strip()
+        input_params = []
+        output_params = []
+    else:
+        proc_name = m.group(1).strip()
+        input_part = m.group(2).strip()
+        output_part = m.group(3).strip()
+
+        def parse_params(part):
+            if not part:
+                return []
+            return [p.split('::')[0].strip() for p in part.split(',') if p.strip()]
+
+        input_params = parse_params(input_part)
+        output_params = parse_params(output_part)
+
+    # Parse data table rows, converting Cypher literals to Python values
+    data_rows = []
+    if hasattr(context, "table") and context.table:
+        headings = list(context.table.headings)
+        for row in context.table:
+            row_dict = {}
+            for h in headings:
+                raw = row[h].strip()
+                if raw == 'null':
+                    row_dict[h] = None
+                elif raw == 'true':
+                    row_dict[h] = True
+                elif raw == 'false':
+                    row_dict[h] = False
+                elif (raw.startswith("'") and raw.endswith("'")) or (raw.startswith('"') and raw.endswith('"')):
+                    row_dict[h] = raw[1:-1]
+                else:
+                    try:
+                        row_dict[h] = int(raw)
+                    except ValueError:
+                        try:
+                            row_dict[h] = float(raw)
+                        except ValueError:
+                            row_dict[h] = raw
+            data_rows.append(row_dict)
+
+    # Register with the Rust coordinator
+    register_procedure(context.graph_db, proc_name, input_params, output_params, data_rows)
