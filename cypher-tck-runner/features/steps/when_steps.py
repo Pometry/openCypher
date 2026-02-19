@@ -35,7 +35,9 @@ def step_when_executing_query(context: Context) -> None:
     count_nodes_before = context.graph_db.count_nodes()
     count_relationships_before = context.graph_db.count_edges()
     try:
-        table = gql(context.graph_db, query)
+        # Pass parameters if they were set by a "Given parameters are:" step
+        params = getattr(context, 'query_parameters', None)
+        table = gql(context.graph_db, query, params=params)
         # Convert GqlRow objects to plain dictionaries
         rows_as_dicts = []
         for row in table:

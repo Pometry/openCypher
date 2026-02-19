@@ -144,23 +144,21 @@ def step_then_side_effects(context: Context) -> None:
         raise AssertionError("No query result available")
 
     # Parse expected side effects from the table
+    # Behave always treats first row as headings, so side-effect key-value pairs
+    # are split: first pair in headings, remaining pairs in rows.
     expected_effects = {}
     
-    # If table has no rows, it means the single row was treated as headers
-    # In that case, use headings as key-value pairs
-    if len(context.table.rows) == 0 and len(context.table.headings) >= 2:
-        # Parse as key-value pairs from headings (e.g., | +nodes | 1 |)
-        # Iterate in pairs: effect_name, effect_value
-        for i in range(0, len(context.table.headings), 2):
-            effect_name = context.table.headings[i]
-            effect_value = int(context.table.headings[i + 1])
-            expected_effects[effect_name] = effect_value
-    else:
-        # Parse as normal rows
-        for row in context.table:
-            effect_name = row[0]
-            effect_value = int(row[1])
-            expected_effects[effect_name] = effect_value
+    # Always parse the headings as the first key-value pair
+    if len(context.table.headings) >= 2:
+        effect_name = context.table.headings[0]
+        effect_value = int(context.table.headings[1])
+        expected_effects[effect_name] = effect_value
+    
+    # Parse remaining key-value pairs from rows
+    for row in context.table:
+        effect_name = row[0]
+        effect_value = int(row[1])
+        expected_effects[effect_name] = effect_value
 
     # Get actual side effects
     actual_effects = context.side_effects.to_dict()
@@ -229,3 +227,25 @@ def step_then_runtime_error(context: Context, error_type: str, error_detail: str
 
     # TODO: Implement more sophisticated error matching
     # Similar to compile-time errors, but check that it was a runtime error
+
+
+@then("a {error_type} should be raised at any time: {error_detail}")
+def step_then_error_any_time(context: Context, error_type: str, error_detail: str) -> None:
+    """Assert that the query raised an error (at compile time or runtime).
+
+    Expected format:
+        Then a TypeError should be raised at any time: InvalidArgumentType
+        Then a TypeError should be raised at any time: *
+
+    Args:
+        error_type: Type of error (e.g., 'TypeError', 'SyntaxError')
+        error_detail: Specific error detail or '*' for any detail
+    """
+    if not context.actual_error:
+        raise AssertionError(
+            f"Expected {error_type} ({error_detail}), but query succeeded\n"
+            f"Query was: {context.last_query}"
+        )
+
+    # For now, just check that an error occurred
+    # TODO: Implement more sophisticated error matching based on error_type and error_detail

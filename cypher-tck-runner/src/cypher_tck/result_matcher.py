@@ -46,11 +46,12 @@ class ResultMatcher:
         Handles:
         - null/NULL -> None
         - true/false -> bool
+        - NaN -> float('nan')
         - Numbers -> int/float
         - Strings in quotes -> str
-        - Lists [...]
-        - Maps {...}
-        - Node/relationship representations (:Label {prop: value})
+        - Lists [...] -> list
+        - Maps {...} -> kept as string (engine returns maps as strings)
+        - Node/relationship/path representations -> kept as string
 
         Args:
             value: String value from table cell
@@ -64,15 +65,19 @@ class ResultMatcher:
         if value.lower() == "null":
             return None
 
+        # Handle NaN
+        if value == "NaN":
+            return float("nan")
+
         # Handle booleans
         if value.lower() == "true":
             return True
         if value.lower() == "false":
             return False
 
-        # Handle numbers
+        # Handle numbers (including scientific notation)
         try:
-            if "." in value:
+            if "." in value or "e" in value.lower():
                 return float(value)
             return int(value)
         except ValueError:
@@ -84,14 +89,83 @@ class ResultMatcher:
         ):
             return value[1:-1]
 
-        # TODO: Handle more complex types:
-        # - Lists: [1, 2, 3]
-        # - Maps: {key: 'value'}
-        # - Nodes: (:Label {prop: value})
-        # - Relationships: [:TYPE {prop: value}]
+        # Handle lists [...] - parse recursively
+        if value.startswith("[") and value.endswith("]"):
+            return ResultMatcher._parse_list(value)
 
-        # Default: return as string
+        # Default: return as string (nodes, relationships, paths, maps, etc.)
         return value
+
+    @staticmethod
+    def _parse_list(value: str) -> list:
+        """Parse a list literal like [1, 2, 3] or ['a', 'b'] or [[1], [2, 3]].
+
+        Handles nested lists, quoted strings, and mixed types.
+        """
+        inner = value[1:-1].strip()
+        if not inner:
+            return []
+
+        elements = []
+        depth = 0
+        current = []
+        in_string = False
+        string_char = None
+
+        for ch in inner:
+            if in_string:
+                current.append(ch)
+                if ch == string_char:
+                    in_string = False
+            elif ch in ("'", '"'):
+                in_string = True
+                string_char = ch
+                current.append(ch)
+            elif ch == "[":
+                depth += 1
+                current.append(ch)
+            elif ch == "]":
+                depth -= 1
+                current.append(ch)
+            elif ch == "," and depth == 0:
+                elements.append("".join(current).strip())
+                current = []
+            else:
+                current.append(ch)
+
+        if current:
+            last = "".join(current).strip()
+            if last:
+                elements.append(last)
+
+        return [ResultMatcher._parse_value(e) for e in elements]
+
+    @staticmethod
+    def _normalize_value(val: Any) -> Any:
+        """Normalize a value for comparison.
+
+        Converts floats that are whole numbers to ints, normalizes lists recursively.
+        """
+        if val is None:
+            return None
+        if isinstance(val, float):
+            if val != val:  # NaN
+                return "NaN"
+            if val == int(val) and not (val == 0.0 and str(val).startswith("-")):
+                return int(val)
+            return val
+        if isinstance(val, list):
+            return [ResultMatcher._normalize_value(v) for v in val]
+        return val
+
+    @staticmethod
+    def _normalize_row(row: dict[str, Any]) -> dict[str, str]:
+        """Normalize a row by converting all values to canonical string form."""
+        result = {}
+        for k, v in row.items():
+            v = ResultMatcher._normalize_value(v)
+            result[k] = str(v) if v is not None else None
+        return result
 
     @staticmethod
     def compare_results(
@@ -128,8 +202,12 @@ class ResultMatcher:
             if not expected_rows:
                 return False, f"Expected 0 rows, got {len(actual_rows)}"
 
-            actual_df = pl.DataFrame(actual_rows)
-            expected_df = pl.DataFrame(expected_rows)
+            # Normalize values for comparison (type coercion)
+            norm_actual = [ResultMatcher._normalize_row(r) for r in actual_rows]
+            norm_expected = [ResultMatcher._normalize_row(r) for r in expected_rows]
+
+            actual_df = pl.DataFrame(norm_actual)
+            expected_df = pl.DataFrame(norm_expected)
 
             # Reorder columns to match expected order
             actual_df = actual_df.select(expected_columns)

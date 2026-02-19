@@ -65,6 +65,58 @@ def step_given_having_executed(context: Context) -> None:
     context.setup_side_effects = SideEffects( nodes_created=graph.count_nodes() - count_nodes_before, relationships_created=graph.count_edges() - count_relationships_before, )
 
 
+@given("parameters are:")
+def step_given_parameters(context: Context) -> None:
+    """Set query parameters for parameterized queries.
+
+    Example:
+        Given parameters are:
+          | expr | ['Apa'] |
+          | idx  | 0       |
+    """
+    if not hasattr(context, "table") or not context.table:
+        raise ValueError("Expected parameter table in 'parameters are' step")
+
+    # Parse parameters from table
+    # Table format: each row has parameter name in first column, value in second column
+    params = {}
+    for row in context.table:
+        # Get the two values from the row
+        row_values = list(row)
+        if len(row_values) != 2:
+            raise ValueError(f"Expected 2 columns in parameter table, got {len(row_values)}")
+
+        param_name = row_values[0].strip()
+        param_value_str = row_values[1].strip()
+
+        # Parse the value (similar to procedure parsing)
+        if param_value_str == 'null':
+            params[param_name] = None
+        elif param_value_str == 'true':
+            params[param_name] = True
+        elif param_value_str == 'false':
+            params[param_name] = False
+        elif (param_value_str.startswith("'") and param_value_str.endswith("'")) or \
+             (param_value_str.startswith('"') and param_value_str.endswith('"')):
+            params[param_name] = param_value_str[1:-1]
+        elif param_value_str.startswith('[') and param_value_str.endswith(']'):
+            # Simple list parsing - for now just store as string, would need full parser for complex cases
+            params[param_name] = param_value_str
+        elif param_value_str.startswith('{') and param_value_str.endswith('}'):
+            # Simple map parsing - for now just store as string
+            params[param_name] = param_value_str
+        else:
+            try:
+                params[param_name] = int(param_value_str)
+            except ValueError:
+                try:
+                    params[param_name] = float(param_value_str)
+                except ValueError:
+                    params[param_name] = param_value_str
+
+    context.query_parameters = params
+
+
 @given('there exists a procedure {procedure_signature}')
 def step_given_procedure_exists(context: Context, procedure_signature: str) -> None:
     """Register a procedure with the Rust query coordinator for CALL testing.

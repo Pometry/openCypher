@@ -35,7 +35,7 @@ class SideEffects:
         if self.relationships_deleted > 0:
             result["-relationships"] = self.relationships_deleted
         if self.properties_set > 0:
-            result["properties set"] = self.properties_set
+            result["+properties"] = self.properties_set
         if self.labels_added > 0:
             result["+labels"] = self.labels_added
         if self.labels_removed > 0:
