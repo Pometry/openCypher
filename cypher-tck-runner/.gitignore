@@ -50,6 +50,14 @@ reports/
 .dmypy.json
 dmypy.json
 
+# Node.js (report generator)
+node_modules/
+
+# TCK report outputs
+results/
+report/
+.results-patched/
+
 # OS
 .DS_Store
 Thumbs.db

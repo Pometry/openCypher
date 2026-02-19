@@ -1,4 +1,4 @@
-.PHONY: help install test lint format type-check check run clean setup-features
+.PHONY: help install test lint format type-check check run clean setup-features tck-report report-install report-generate report-clean
 
 help:  ## Show this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
@@ -41,6 +41,22 @@ fix:  ## Auto-fix linting issues
 
 setup-features:  ## Copy feature files from openCypher TCK (usage: make setup-features TCK=../tck/features)
 	python setup_features.py $(TCK)
+
+# ── HTML Report Pipeline ──────────────────────────────────────────────
+report-install:  ## Install Node.js report generator dependencies
+	npm install --prefix .
+
+tck-report:  ## Build raphtory, run TCK tests, and generate HTML report
+	$(MAKE) -C ../.. install-python
+	@mkdir -p results
+	-behave features/ --no-capture -f json -o results/$$(date +%Y%m%d-%H%M%S).json -f pretty
+	node generate-report.js
+
+report-generate:  ## Generate HTML report from existing results (no test run)
+	node generate-report.js
+
+report-clean:  ## Remove all result JSON files and generated reports
+	rm -rf results/ report/
 
 clean:  ## Clean up generated files
 	find . -type d -name __pycache__ -exec rm -rf {} +

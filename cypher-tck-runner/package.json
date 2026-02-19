@@ -1,0 +1,12 @@
+{
+    "name": "cypher-tck-reporter",
+    "version": "1.0.0",
+    "private": true,
+    "description": "HTML report generator for openCypher TCK test results",
+    "scripts": {
+        "report": "node generate-report.js"
+    },
+    "dependencies": {
+        "multiple-cucumber-html-reporter": "^3.8.0"
+    }
+}
