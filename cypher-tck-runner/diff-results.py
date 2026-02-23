@@ -15,7 +15,11 @@ from pathlib import Path
 def load_statuses(path: str) -> dict[str, str]:
     """Return {scenario_id: status} from a behave JSON result file."""
     with open(path) as f:
-        features = json.load(f)
+        try:
+            features = json.load(f)
+        except json.JSONDecodeError as e:
+            print(f"✗ {Path(path).name} is corrupted (behave may have been interrupted): {e}")
+            sys.exit(1)
     statuses: dict[str, str] = {}
     for feat in features:
         feat_name = feat["name"]

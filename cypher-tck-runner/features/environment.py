@@ -2,6 +2,8 @@
 
 This module sets up the test environment for each scenario, including
 initializing the graph database and storing scenario context.
+ReportPortal streaming is optional — tests run and produce JSON results
+regardless of whether RP is available.
 """
 
 from __future__ import annotations
@@ -15,8 +17,6 @@ if TYPE_CHECKING:
     from behave.runner import Context
 
 # ── ReportPortal integration ──────────────────────────────────────────────────
-# behave-reportportal streams live results to a local RP instance.
-# The agent is created lazily so tests run normally when RP is not configured.
 try:
     from behave_reportportal.behave_agent import BehaveAgent, create_rp_service
     from behave_reportportal.config import Config
@@ -28,6 +28,18 @@ except ImportError:
 def _get_agent(context: "Context") -> "BehaveAgent | None":
     """Return the BehaveAgent stored on the context, or None if RP is disabled."""
     return getattr(context, "rp_agent", None)
+
+
+def _rp_call(context: "Context", fn_name: str, *args: Any) -> None:
+    """Call an RP agent method, disabling the agent on any failure."""
+    agent = _get_agent(context)
+    if not agent:
+        return
+    try:
+        getattr(agent, fn_name)(*args)
+    except Exception as exc:
+        print(f"[RP] {fn_name} failed, disabling ReportPortal: {exc}")
+        context.rp_agent = None
 
 
 def _load_rp_config() -> "Config | None":
@@ -48,64 +60,66 @@ def _load_rp_config() -> "Config | None":
     return Config(**rp_cfg)
 
 
+def _rp_is_reachable(cfg: "Config") -> bool:
+    """Quick check whether the RP endpoint is actually listening."""
+    import urllib.request
+    try:
+        urllib.request.urlopen(cfg.endpoint, timeout=2)
+        return True
+    except Exception:
+        return False
+
+
 def before_all(context: Context) -> None:
     """Initialize the test environment before any scenarios run."""
     context.graph_db = Graph()
 
-    # Start a ReportPortal launch (no-op if RP is not configured)
+    # Start a ReportPortal launch (no-op if RP is not configured/reachable)
     context.rp_agent = None
     if _RP_AVAILABLE:
         try:
             cfg = _load_rp_config()
             if cfg:
-                rp_service = create_rp_service(cfg)
-                context.rp_agent = BehaveAgent(cfg, rp_service)
-                context.rp_agent.start_launch(context)
-                print("[RP] Streaming results to ReportPortal")
+                if not _rp_is_reachable(cfg):
+                    print("[RP] ReportPortal not reachable, skipping")
+                else:
+                    # Suppress noisy RP client library logging
+                    import logging
+                    logging.getLogger("reportportal_client").setLevel(logging.CRITICAL)
+                    rp_service = create_rp_service(cfg)
+                    context.rp_agent = BehaveAgent(cfg, rp_service)
+                    context.rp_agent.start_launch(context)
+                    print("[RP] Streaming results to ReportPortal")
         except Exception as exc:
+            context.rp_agent = None
             print(f"[RP] Could not connect to ReportPortal, skipping: {exc}")
 
 
 def before_scenario(context: Context, scenario: Scenario) -> None:
     """Set up state before each scenario."""
-    # Start each scenario with a fresh graph
     context.graph_db = Graph()
-
-    # Initialize scenario-specific state
     context.query_result = None
     context.last_query = None
     context.expected_error = None
     context.actual_error = None
-
-    agent = _get_agent(context)
-    if agent:
-        agent.start_scenario(context, scenario)
+    _rp_call(context, "start_scenario", context, scenario)
 
 
 def after_scenario(context: Context, scenario: Scenario) -> None:
     """Clean up after each scenario."""
-    agent = _get_agent(context)
-    if agent:
-        agent.finish_scenario(context, scenario)
-
+    _rp_call(context, "finish_scenario", context, scenario)
 
 
 def before_step(context: Context, step: Any) -> None:
     """Hook called before each step."""
-    agent = _get_agent(context)
-    if agent:
-        agent.start_step(context, step)
+    _rp_call(context, "start_step", context, step)
 
 
 def after_step(context: Context, step: Any) -> None:
     """Hook called after each step."""
-    agent = _get_agent(context)
-    if agent:
-        agent.finish_step(context, step)
+    _rp_call(context, "finish_step", context, step)
 
 
 def after_all(context: Context) -> None:
     """Finish the ReportPortal launch after all scenarios complete."""
-    agent = _get_agent(context)
-    if agent:
-        agent.finish_launch(context)
+    _rp_call(context, "finish_launch", context)

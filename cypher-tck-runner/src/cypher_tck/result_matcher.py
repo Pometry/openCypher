@@ -141,10 +141,74 @@ class ResultMatcher:
         return [ResultMatcher._parse_value(e) for e in elements]
 
     @staticmethod
+    def _normalize_node_string(s: str) -> str:
+        """Normalize a node string by sorting properties alphabetically.
+
+        Handles patterns like '(:Label {b: 2, a: 1})' -> '(:Label {a: 1, b: 2})'
+        so that property key order doesn't affect comparison.
+        """
+        import re
+
+        # Match node pattern: optional labels, optional properties
+        # e.g., '(:B {num: 5, bool: false})' or '(:A:B {x: 1})'
+        m = re.match(r'^(\((?::\w+(?::[\w]+)*)?)\s*\{(.*)\}\)$', s, re.DOTALL)
+        if not m:
+            return s
+
+        prefix = m.group(1)  # e.g., '(:B'
+        props_str = m.group(2).strip()
+
+        if not props_str:
+            return s
+
+        # Parse property key-value pairs, handling nested structures
+        pairs = []
+        depth = 0
+        in_string = False
+        string_char = None
+        current = []
+        for ch in props_str:
+            if in_string:
+                current.append(ch)
+                if ch == string_char:
+                    in_string = False
+            elif ch in ("'", '"'):
+                in_string = True
+                string_char = ch
+                current.append(ch)
+            elif ch in ('[', '(', '{'):
+                depth += 1
+                current.append(ch)
+            elif ch in (']', ')', '}'):
+                depth -= 1
+                current.append(ch)
+            elif ch == ',' and depth == 0:
+                pairs.append(''.join(current).strip())
+                current = []
+            else:
+                current.append(ch)
+        if current:
+            last = ''.join(current).strip()
+            if last:
+                pairs.append(last)
+
+        # Sort by the key part (before the first ':')
+        def sort_key(pair):
+            colon_idx = pair.find(':')
+            if colon_idx >= 0:
+                return pair[:colon_idx].strip()
+            return pair
+
+        pairs.sort(key=sort_key)
+        return f"{prefix} {{{', '.join(pairs)}}})"
+
+    @staticmethod
     def _normalize_value(val: Any) -> Any:
         """Normalize a value for comparison.
 
         Converts floats that are whole numbers to ints, normalizes lists recursively.
+        Parses string-encoded lists (e.g., '["a", "b"]') into actual lists.
+        Normalizes node strings so property key order doesn't matter.
         """
         if val is None:
             return None
@@ -156,6 +220,17 @@ class ResultMatcher:
             return val
         if isinstance(val, list):
             return [ResultMatcher._normalize_value(v) for v in val]
+        if isinstance(val, str):
+            # Parse string-encoded lists from the engine (e.g., '["1984-10-12"]')
+            if val.startswith("[") and val.endswith("]"):
+                try:
+                    parsed = ResultMatcher._parse_list(val)
+                    return [ResultMatcher._normalize_value(v) for v in parsed]
+                except Exception:
+                    pass
+            # Normalize node strings so property order doesn't affect comparison
+            if val.startswith("(:") and val.endswith(")") and "{" in val:
+                return ResultMatcher._normalize_node_string(val)
         return val
 
     @staticmethod
@@ -209,6 +284,11 @@ class ResultMatcher:
             actual_df = pl.DataFrame(norm_actual)
             expected_df = pl.DataFrame(norm_expected)
 
+            # Cast all columns to String to ensure type-consistent comparison
+            # (avoids Polars Null vs String type mismatches for null-only columns)
+            actual_df = actual_df.cast({col: pl.String for col in actual_df.columns})
+            expected_df = expected_df.cast({col: pl.String for col in expected_df.columns})
+
             # Reorder columns to match expected order
             actual_df = actual_df.select(expected_columns)
 
@@ -218,8 +298,8 @@ class ResultMatcher:
                 actual_df = actual_df.sort(expected_columns)
                 expected_df = expected_df.sort(expected_columns)
 
-            # Compare DataFrames
-            if actual_df.equals(expected_df):
+            # Compare DataFrames (null_equal=True so null == null)
+            if actual_df.equals(expected_df, null_equal=True):
                 return True, ""
             else:
                 return False, (

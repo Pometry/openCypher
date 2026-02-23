@@ -14,6 +14,25 @@ if TYPE_CHECKING:
     from behave.runner import Context
 
 
+def _count_properties(graph):
+    """Count total number of property values across all nodes and edges."""
+    total = 0
+    for node in graph.nodes:
+        total += len(node.properties.as_dict())
+    for edge in graph.edges:
+        total += len(edge.properties.as_dict())
+    return total
+
+
+def _count_labels(graph):
+    """Count distinct label types in the graph."""
+    labels = set()
+    for node in graph.nodes:
+        if node.node_type is not None and node.node_type != "":
+            labels.add(node.node_type)
+    return len(labels)
+
+
 @when("executing query:")
 def step_when_executing_query(context: Context) -> None:
     """Execute a Cypher query.
@@ -34,6 +53,8 @@ def step_when_executing_query(context: Context) -> None:
     # Execute the query and store the result
     count_nodes_before = context.graph_db.count_nodes()
     count_relationships_before = context.graph_db.count_edges()
+    count_properties_before = _count_properties(context.graph_db)
+    count_labels_before = _count_labels(context.graph_db)
     try:
         # Pass parameters if they were set by a "Given parameters are:" step
         params = getattr(context, 'query_parameters', None)
@@ -50,8 +71,18 @@ def step_when_executing_query(context: Context) -> None:
         # Store the error for validation in Then steps
         context.actual_error = e
         context.query_result = None
-        
-    side_effects = SideEffects( nodes_created=context.graph_db.count_nodes() - count_nodes_before, relationships_created=context.graph_db.count_edges() - count_relationships_before, )
+
+    nodes_created = context.graph_db.count_nodes() - count_nodes_before
+    relationships_created = context.graph_db.count_edges() - count_relationships_before
+    properties_set = _count_properties(context.graph_db) - count_properties_before
+    labels_added = _count_labels(context.graph_db) - count_labels_before
+
+    side_effects = SideEffects(
+        nodes_created=nodes_created,
+        relationships_created=relationships_created,
+        properties_set=max(0, properties_set),
+        labels_added=max(0, labels_added),
+    )
     print(f"Side Effects: {side_effects}")
     context.side_effects = side_effects
 
