@@ -78,11 +78,19 @@ def step_given_parameters(context: Context) -> None:
         raise ValueError("Expected parameter table in 'parameters are' step")
 
     # Parse parameters from table
-    # Table format: each row has parameter name in first column, value in second column
+    # Table format: each row has parameter name in first column, value in second column.
+    # In Gherkin, the first row is treated as headers by behave, so we need to
+    # include the header row as data too (TCK uses 2-column tables where every
+    # row, including the first, is a key-value parameter pair).
     params = {}
+    all_rows = []
+    # Include header row as data (behave treats it as column names)
+    if context.table.headings and len(context.table.headings) == 2:
+        all_rows.append(context.table.headings)
     for row in context.table:
-        # Get the two values from the row
-        row_values = list(row)
+        all_rows.append(list(row))
+
+    for row_values in all_rows:
         if len(row_values) != 2:
             raise ValueError(f"Expected 2 columns in parameter table, got {len(row_values)}")
 
