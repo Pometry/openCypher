@@ -88,6 +88,66 @@ def step_then_result_ordered(context: Context) -> None:
         )
 
 
+@then("the result should be, in order (ignoring element order for lists):")
+def step_then_result_ordered_list_order_insensitive(context: Context) -> None:
+    """Assert results match in order, treating lists as unordered."""
+    if context.actual_error:
+        raise AssertionError(
+            f"Query failed with error: {context.actual_error}\n"
+            f"Query was: {context.last_query}"
+        )
+
+    if not context.query_result:
+        raise AssertionError("No query result available")
+
+    table_rows = [list(context.table.headings)] + [[cell for cell in row] for row in context.table]
+    expected_columns, expected_rows = ResultMatcher.parse_table_rows(table_rows)
+
+    match, error = ResultMatcher.compare_results(
+        actual_columns=context.query_result.columns,
+        actual_rows=context.query_result.rows,
+        expected_columns=expected_columns,
+        expected_rows=expected_rows,
+        ordered=True,
+        sort_lists=True,
+    )
+
+    if not match:
+        raise AssertionError(
+            f"Result mismatch:\n{error}\n" f"Query was: {context.last_query}"
+        )
+
+
+@then("the result should be (ignoring element order for lists):")
+def step_then_result_list_order_insensitive(context: Context) -> None:
+    """Assert results match, treating lists as unordered (for keys(), collect(), etc.)."""
+    if context.actual_error:
+        raise AssertionError(
+            f"Query failed with error: {context.actual_error}\n"
+            f"Query was: {context.last_query}"
+        )
+
+    if not context.query_result:
+        raise AssertionError("No query result available")
+
+    table_rows = [list(context.table.headings)] + [[cell for cell in row] for row in context.table]
+    expected_columns, expected_rows = ResultMatcher.parse_table_rows(table_rows)
+
+    match, error = ResultMatcher.compare_results(
+        actual_columns=context.query_result.columns,
+        actual_rows=context.query_result.rows,
+        expected_columns=expected_columns,
+        expected_rows=expected_rows,
+        ordered=False,
+        sort_lists=True,
+    )
+
+    if not match:
+        raise AssertionError(
+            f"Result mismatch:\n{error}\n" f"Query was: {context.last_query}"
+        )
+
+
 @then("the result should be empty")
 def step_then_result_empty(context: Context) -> None:
     """Assert that the query returned no rows.

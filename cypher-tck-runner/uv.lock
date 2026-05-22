@@ -11,7 +11,7 @@ resolution-markers = [
 ]
 
 [options]
-exclude-newer = "2099-01-02T00:00:00Z"
+exclude-newer = "2099-01-01T23:00:00Z"
 
 [[package]]
 name = "behave"

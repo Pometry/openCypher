@@ -15,6 +15,29 @@ if TYPE_CHECKING:
     from behave.runner import Context
 
 
+def _load_named_graph(context: Context, cypher_file: str) -> None:
+    """Load a named graph from a .cypher file and execute it."""
+    import os
+    context.graph_db = Graph()
+    features_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    graph_path = os.path.join(features_dir, "graphs", cypher_file, f"{cypher_file}.cypher")
+    with open(graph_path) as f:
+        query = f.read().strip()
+    gql(context.graph_db, query)
+
+
+@given("the binary-tree-1 graph")
+def step_given_binary_tree_1(context: Context) -> None:
+    """Load the binary-tree-1 named graph."""
+    _load_named_graph(context, "binary-tree-1")
+
+
+@given("the binary-tree-2 graph")
+def step_given_binary_tree_2(context: Context) -> None:
+    """Load the binary-tree-2 named graph."""
+    _load_named_graph(context, "binary-tree-2")
+
+
 @given("an empty graph")
 def step_given_empty_graph(context: Context) -> None:
     """Initialize an empty graph database.
@@ -97,30 +120,21 @@ def step_given_parameters(context: Context) -> None:
         param_name = row_values[0].strip()
         param_value_str = row_values[1].strip()
 
-        # Parse the value (similar to procedure parsing)
-        if param_value_str == 'null':
-            params[param_name] = None
-        elif param_value_str == 'true':
-            params[param_name] = True
-        elif param_value_str == 'false':
-            params[param_name] = False
-        elif (param_value_str.startswith("'") and param_value_str.endswith("'")) or \
-             (param_value_str.startswith('"') and param_value_str.endswith('"')):
-            params[param_name] = param_value_str[1:-1]
-        elif param_value_str.startswith('[') and param_value_str.endswith(']'):
-            # Simple list parsing - for now just store as string, would need full parser for complex cases
-            params[param_name] = param_value_str
-        elif param_value_str.startswith('{') and param_value_str.endswith('}'):
-            # Simple map parsing - for now just store as string
-            params[param_name] = param_value_str
-        else:
-            try:
-                params[param_name] = int(param_value_str)
-            except ValueError:
-                try:
-                    params[param_name] = float(param_value_str)
-                except ValueError:
-                    params[param_name] = param_value_str
+        # Parse the value using ResultMatcher
+        from cypher_tck.result_matcher import ResultMatcher
+        val = ResultMatcher._parse_value(param_value_str)
+        # _parse_value returns maps as strings; parse them into dicts for parameter use
+        if isinstance(val, str) and val.startswith('{') and val.endswith('}'):
+            val = ResultMatcher._parse_map(val)
+        # _parse_list returns map elements as strings; convert them to dicts
+        if isinstance(val, list):
+            val = [
+                ResultMatcher._parse_map(item)
+                if isinstance(item, str) and item.startswith('{') and item.endswith('}')
+                else item
+                for item in val
+            ]
+        params[param_name] = val
 
     context.query_parameters = params
 
@@ -149,11 +163,26 @@ def step_given_procedure_exists(context: Context, procedure_signature: str) -> N
 
         def parse_params(part):
             if not part:
-                return []
-            return [p.split('::')[0].strip() for p in part.split(',') if p.strip()]
+                return [], []
+            names = []
+            types = []
+            for p in part.split(','):
+                if not p.strip():
+                    continue
+                parts = p.split('::')
+                names.append(parts[0].strip())
+                if len(parts) > 1:
+                    # Strip trailing '?' and whitespace, uppercase
+                    types.append(parts[1].strip().rstrip('?').strip().upper())
+                else:
+                    types.append('')
+            return names, types
 
-        input_params = parse_params(input_part)
-        output_params = parse_params(output_part)
+        input_params, input_param_types = parse_params(input_part)
+        output_params, _ = parse_params(output_part)
+
+    if not m:
+        input_param_types = []
 
     # Parse data table rows, converting Cypher literals to Python values
     data_rows = []
@@ -182,4 +211,4 @@ def step_given_procedure_exists(context: Context, procedure_signature: str) -> N
             data_rows.append(row_dict)
 
     # Register with the Rust coordinator
-    register_procedure(context.graph_db, proc_name, input_params, output_params, data_rows)
+    register_procedure(context.graph_db, proc_name, input_params, input_param_types, output_params, data_rows)

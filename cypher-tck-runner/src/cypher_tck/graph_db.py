@@ -20,6 +20,7 @@ class SideEffects:
     relationships_created: int = 0
     relationships_deleted: int = 0
     properties_set: int = 0
+    properties_removed: int = 0
     labels_added: int = 0
     labels_removed: int = 0
 
@@ -36,6 +37,8 @@ class SideEffects:
             result["-relationships"] = self.relationships_deleted
         if self.properties_set > 0:
             result["+properties"] = self.properties_set
+        if self.properties_removed > 0:
+            result["-properties"] = self.properties_removed
         if self.labels_added > 0:
             result["+labels"] = self.labels_added
         if self.labels_removed > 0:
@@ -52,6 +55,7 @@ class SideEffects:
                 self.relationships_created,
                 self.relationships_deleted,
                 self.properties_set,
+                self.properties_removed,
                 self.labels_added,
                 self.labels_removed,
             ]
