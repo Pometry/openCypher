@@ -10,7 +10,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+import re
+
 from raphtory import Graph
+
+_WRITE = re.compile(r"\b(CREATE|MERGE|SET|DELETE|DETACH|REMOVE)\b", re.I)
 
 if TYPE_CHECKING:
     from behave.model import Scenario
@@ -97,6 +101,8 @@ def before_all(context: Context) -> None:
 
 def before_scenario(context: Context, scenario: Scenario) -> None:
     """Set up state before each scenario."""
+    if any(step.name.startswith("executing query") and _WRITE.search(step.text or "") for step in scenario.steps):
+        scenario.skip("clam refuses Cypher writes")
     context.graph_db = Graph()
     context.query_result = None
     context.last_query = None

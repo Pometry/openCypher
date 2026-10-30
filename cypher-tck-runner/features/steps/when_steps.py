@@ -83,17 +83,17 @@ def step_when_executing_query(context: Context) -> None:
     count_diff_properties = max(0, _count_properties(context.graph_db) - count_properties_before)
 
     # Deletion/mutation side effects reported by GQL engine (Raphtory is append-only for nodes).
-    nodes_deleted = table.nodes_deleted if table is not None else 0
-    relationships_deleted = table.relationships_deleted if table is not None else 0
+    nodes_deleted = getattr(table, "nodes_deleted", 0)
+    relationships_deleted = getattr(table, "relationships_deleted", 0)
     # properties_removed: from DELETE/REMOVE ops + overwrites from SET (old value removed)
-    properties_removed = (table.properties_removed if table is not None else 0) + \
-                         (table.properties_overwritten if table is not None else 0)
-    labels_removed = table.labels_removed if table is not None else 0
+    properties_removed = (getattr(table, "properties_removed", 0)) + \
+                         (getattr(table, "properties_overwritten", 0))
+    labels_removed = getattr(table, "labels_removed", 0)
 
     # labels_added: GQL reports labels added by MERGE/SET n:Label operations.
     # For CREATE operations, the graph-state diff is used instead.
     # Use GQL value when it's > 0 (MERGE/SET case), else graph-state diff (CREATE case).
-    labels_added_gql = table.labels_added if table is not None else 0
+    labels_added_gql = getattr(table, "labels_added", 0)
     labels_added_diff = max(0, _count_labels(context.graph_db) - count_labels_before)
     labels_added = labels_added_gql if labels_added_gql > 0 else labels_added_diff
 
@@ -102,15 +102,15 @@ def step_when_executing_query(context: Context) -> None:
     # Graph-state diff captures CREATE relationships not reported in the arc (arc is last-write-wins).
     # When MERGE creates 1 + CREATE creates 1 more: GQL=1, diff=2 → max=2 (correct).
     # When MERGE creates a parallel edge (invisible to diff): GQL=1, diff=0 → max=1 (correct).
-    relationships_created_gql = table.relationships_created if table is not None else 0
+    relationships_created_gql = getattr(table, "relationships_created", 0)
     relationships_created_diff = max(0, context.graph_db.count_edges() - count_relationships_before)
     relationships_created = max(relationships_created_gql, relationships_created_diff)
 
     # properties_set: take max of (graph-state diff + overwrites) and GQL-reported.
     # GQL captures properties on MERGE-created parallel edges invisible to graph-state diff;
     # graph-state diff captures properties from CREATE that GQL doesn't report.
-    properties_overwritten = table.properties_overwritten if table is not None else 0
-    properties_set_gql = table.properties_set if table is not None else 0
+    properties_overwritten = getattr(table, "properties_overwritten", 0)
+    properties_set_gql = getattr(table, "properties_set", 0)
     properties_set_diff = count_diff_properties + properties_overwritten
     properties_set = max(properties_set_diff, properties_set_gql)
 

@@ -363,8 +363,15 @@ class ResultMatcher:
             if val == int(val) and not (val == 0.0 and str(val).startswith("-")):
                 return int(val)
             return val
+        if isinstance(val, dict):
+            return ResultMatcher._map_text(val)
         if isinstance(val, list):
             return [ResultMatcher._normalize_value(v) for v in val]
+        if isinstance(val, str) and val.startswith("{") and val.endswith("}"):
+            try:
+                return ResultMatcher._map_text(ResultMatcher._parse_map(val))
+            except Exception:
+                pass
         if isinstance(val, str):
             # Strip VID prefix embedded by nodes(p) for pattern comprehension traversal.
             # Format: "VID:N:(:display_string)" — strip "VID:N:" to get "(:display_string)"
@@ -399,6 +406,24 @@ class ResultMatcher:
                 normalized = _re2.sub(r'(\w+)\s*:\s*', r'\1: ', props_str)
                 return f"{type_part}{{{normalized}}}"
         return val
+
+    @staticmethod
+    def _map_text(m: dict) -> str:
+        """Canonical Cypher text for a map, keys sorted: engine dicts and expected `{...}` agree."""
+
+        def text(v: Any) -> str:
+            if isinstance(v, dict):
+                return ResultMatcher._map_text(v)
+            if isinstance(v, list):
+                return "[" + ", ".join(text(x) for x in v) + "]"
+            if isinstance(v, str) and v.startswith("{") and v.endswith("}"):
+                return ResultMatcher._map_text(ResultMatcher._parse_map(v))
+            v = ResultMatcher._normalize_value(v)
+            if v is None:
+                return "null"
+            return f"'{v}'" if isinstance(v, str) and v not in ("true", "false", "NaN") else str(v)
+
+        return "{" + ", ".join(f"{k.strip('`')}: {text(v)}" for k, v in sorted(m.items())) + "}"
 
     @staticmethod
     def _normalize_row(row: dict[str, Any]) -> dict[str, str]:

@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING
 
 from behave import given
 from cypher_tck.graph_db import SideEffects
+from cypher_tck import setup_cache
+from cypher_tck.setup import create_graph
 from raphtory import Graph
 from raphtory.gql import gql
 import common
@@ -23,7 +25,8 @@ def _load_named_graph(context: Context, cypher_file: str) -> None:
     graph_path = os.path.join(features_dir, "graphs", cypher_file, f"{cypher_file}.cypher")
     with open(graph_path) as f:
         query = f.read().strip()
-    gql(context.graph_db, query)
+    if not create_graph(context.graph_db, query):
+        gql(context.graph_db, query)
 
 
 @given("the binary-tree-1 graph")
@@ -82,8 +85,14 @@ def step_given_having_executed(context: Context) -> None:
     count_nodes_before = graph.count_nodes()
     count_relationships_before = graph.count_edges()
 
-    results = gql(graph, query)
-    context.query_result = common.ResultTable(columns=results.columns, rows=list(results))
+    context.setup_queries = getattr(context, "setup_queries", []) + [query]
+    if create_graph(graph, query) or setup_cache.replay(context.setup_queries, graph):
+        context.query_result = common.ResultTable(columns=[], rows=[])
+    else:
+        before = setup_cache.snapshot(graph)
+        results = gql(graph, query)
+        context.query_result = common.ResultTable(columns=results.columns, rows=list(results))
+        setup_cache.record(context.setup_queries, before, graph)
     # Store the side effects from setup (in case they're needed)
     context.setup_side_effects = SideEffects( nodes_created=graph.count_nodes() - count_nodes_before, relationships_created=graph.count_edges() - count_relationships_before, )
 
