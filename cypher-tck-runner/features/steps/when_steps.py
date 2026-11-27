@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 from behave import when
 from cypher_tck.graph_db import SideEffects
 from raphtory import Graph
-from raphtory.gql import gql
+from raphtory.cypher import cypher
 import common
 
 if TYPE_CHECKING:
@@ -65,12 +65,11 @@ def step_when_executing_query(context: Context) -> None:
     try:
         # Pass parameters if they were set by a "Given parameters are:" step
         params = getattr(context, 'query_parameters', None)
-        table = gql(context.graph_db, query, params=params)
-        # Convert GqlRow objects to plain dictionaries
+        table = cypher(context.graph_db, query, params=params)
+        # Rows as plain dictionaries, nodes, edges and paths as Cypher text
         rows_as_dicts = []
         for row in table:
-            # GqlRow objects can be converted to dict by accessing as dictionary
-            row_dict = {col: row[col] for col in table.columns}
+            row_dict = {col: row.text(col) for col in table.columns}
             rows_as_dicts.append(row_dict)
         context.query_result = common.ResultTable(columns=table.columns, rows=rows_as_dicts)
         context.actual_error = None

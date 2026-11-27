@@ -10,7 +10,7 @@ from cypher_tck.graph_db import SideEffects
 from cypher_tck import setup_cache
 from cypher_tck.setup import create_graph
 from raphtory import Graph
-from raphtory.gql import gql
+from raphtory.cypher import cypher
 import common
 
 if TYPE_CHECKING:
@@ -26,7 +26,7 @@ def _load_named_graph(context: Context, cypher_file: str) -> None:
     with open(graph_path) as f:
         query = f.read().strip()
     if not create_graph(context.graph_db, query):
-        gql(context.graph_db, query)
+        cypher(context.graph_db, query)
 
 
 @given("the binary-tree-1 graph")
@@ -90,8 +90,8 @@ def step_given_having_executed(context: Context) -> None:
         context.query_result = common.ResultTable(columns=[], rows=[])
     else:
         before = setup_cache.snapshot(graph)
-        results = gql(graph, query)
-        context.query_result = common.ResultTable(columns=results.columns, rows=list(results))
+        results = cypher(graph, query)
+        context.query_result = common.ResultTable(columns=results.columns, rows=[{col: row.text(col) for col in results.columns} for row in results])
         setup_cache.record(context.setup_queries, before, graph)
     # Store the side effects from setup (in case they're needed)
     context.setup_side_effects = SideEffects( nodes_created=graph.count_nodes() - count_nodes_before, relationships_created=graph.count_edges() - count_relationships_before, )
@@ -157,7 +157,7 @@ def step_given_procedure_exists(context: Context, procedure_signature: str) -> N
         Given there exists a procedure test.my.proc(name :: STRING?, id :: INTEGER?) :: (city :: STRING?, country_code :: INTEGER?):
     """
     import re
-    from raphtory.gql import register_procedure
+    from raphtory.cypher import register_procedure
 
     # Parse signature: name(input_params) :: (output_params)
     m = re.match(r'([\w.]+)\((.*?)\)\s*::\s*\((.*?)\)', procedure_signature, re.DOTALL)
